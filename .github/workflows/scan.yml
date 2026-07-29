@@ -5,6 +5,10 @@ on:
     - cron: '*/10 * * * *'   # каждые 10 минут
   workflow_dispatch:          # разрешает запускать вручную кнопкой на GitHub
 
+concurrency:
+  group: telegram-scan       # запуски с одинаковой группой не выполняются одновременно
+  cancel-in-progress: false  # не отменять текущий запуск, а поставить следующий в очередь
+
 jobs:
   scan:
     runs-on: ubuntu-latest
