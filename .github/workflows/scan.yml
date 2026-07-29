@@ -1,0 +1,36 @@
+name: Scan channels
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'   # каждые 10 минут
+  workflow_dispatch:          # разрешает запускать вручную кнопкой на GitHub
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Установка библиотек
+        run: pip install -r requirements.txt
+
+      - name: Проверка каналов и пересылка находок
+        env:
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+          TELETHON_SESSION: ${{ secrets.TELETHON_SESSION }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: "1389229319"
+        run: python main.py
+
+      - name: Сохранение памяти о проверенных сообщениях
+        run: |
+          git config user.name "channel-tracker-bot"
+          git config user.email "actions@github.com"
+          git add state.json
+          git diff --staged --quiet || git commit -m "Обновление состояния"
+          git push
