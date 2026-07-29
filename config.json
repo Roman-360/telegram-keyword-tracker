@@ -1,0 +1,10 @@
+{
+  "channels": [
+    "@example_channel1",
+    "@example_channel2"
+  ],
+  "keywords": [
+    "пример слова",
+    "ещё одно слово"
+  ]
+}
