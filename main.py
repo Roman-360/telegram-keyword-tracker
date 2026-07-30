@@ -4,6 +4,11 @@ import time
 import requests
 from telethon.sync import TelegramClient
 from telethon.sessions import StringSession
+from telethon.tl.types import (
+    MessageEntityBold, MessageEntityItalic, MessageEntityUnderline,
+    MessageEntityStrike, MessageEntityCode, MessageEntityPre,
+    MessageEntityTextUrl, MessageEntitySpoiler, MessageEntityBlockquote,
+)
 
 # --- Секретные данные читаются из переменных окружения (GitHub Secrets) ---
 API_ID = int(os.environ["TELEGRAM_API_ID"])
@@ -16,7 +21,21 @@ CONFIG_FILE = "config.json"   # список каналов и ключевых 
 STATE_FILE = "state.json"     # "память" — до какого сообщения уже проверено (создаётся сама)
 
 MAX_MESSAGE_LENGTH = 3900     # с запасом от лимита Telegram в 4096 символов на сообщение
-DELAY_BETWEEN_MESSAGES = 2    # пауза (в секундах) между отправками, чтобы не упираться в лимиты Telegram
+DELAY_BETWEEN_MESSAGES = 2    # пауза (в секундах) между отправками
+
+# Соответствие типов форматирования Telethon -> Telegram Bot API,
+# чтобы жирный текст и ссылки из оригинального поста сохранялись как есть
+ENTITY_TYPE_MAP = {
+    MessageEntityBold: "bold",
+    MessageEntityItalic: "italic",
+    MessageEntityUnderline: "underline",
+    MessageEntityStrike: "strikethrough",
+    MessageEntityCode: "code",
+    MessageEntityPre: "pre",
+    MessageEntityTextUrl: "text_link",
+    MessageEntitySpoiler: "spoiler",
+    MessageEntityBlockquote: "blockquote",
+}
 
 
 def load_json(path, default):
@@ -42,12 +61,44 @@ def matches_keywords(text, keywords):
     return None
 
 
-def send_to_telegram(text, max_retries=5):
+def utf16_len(s):
+    """Telegram считает позиции символов в тексте в единицах UTF-16
+    (эмодзи и некоторые символы занимают по 2 единицы вместо одной) —
+    обычная длина строки в Python этого не учитывает, поэтому считаем отдельно."""
+    return len(s.encode("utf-16-le")) // 2
+
+
+def convert_entities(entities, offset_shift):
+    """Переводит форматирование оригинального поста (жирный текст, ссылки
+    и т.п.) в формат, понятный Telegram Bot API. offset_shift нужен, потому
+    что перед текстом поста мы добавляем свою "шапку" сообщения, и позиции
+    форматирования нужно сдвинуть на её длину."""
+    result = []
+    if not entities:
+        return result
+    for ent in entities:
+        bot_type = ENTITY_TYPE_MAP.get(type(ent))
+        if not bot_type:
+            continue  # типы, которые не переносим (например, упоминания пользователей)
+        item = {
+            "type": bot_type,
+            "offset": ent.offset + offset_shift,
+            "length": ent.length,
+        }
+        if bot_type == "text_link":
+            item["url"] = ent.url
+        result.append(item)
+    return result
+
+
+def send_to_telegram(text, entities=None, max_retries=5):
     """Отправляет сообщение боту. Если Telegram временно ограничил частоту
     запросов (ошибка 429), ждёт нужное время и повторяет попытку, чтобы
     сообщение не терялось."""
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": text, "disable_web_page_preview": False}
+    if entities:
+        payload["entities"] = entities
 
     for attempt in range(1, max_retries + 1):
         resp = requests.post(url, json=payload, timeout=20)
@@ -103,20 +154,16 @@ def main():
     with TelegramClient(StringSession(SESSION), API_ID, API_HASH) as client:
         for channel in channels:
             print(f"Проверяю канал: {channel}")
-            last_id = state.get(channel, 0)   # 0 = ещё ни разу не проверяли (читаем всю историю)
+            last_id = state.get(channel, 0)
             max_id_seen = last_id
             found_count = 0
 
             try:
-                # min_id=last_id — берём только сообщения новее уже проверенных
-                # reverse=True — идём от старых к новым по порядку
                 messages = client.iter_messages(channel, min_id=last_id, reverse=True)
                 for msg in messages:
                     if msg.id > max_id_seen:
                         max_id_seen = msg.id
 
-                    # raw_text — обычный читаемый текст поста, без служебных
-                    # символов разметки markdown (**, [], и т.п.)
                     keyword = matches_keywords(msg.raw_text, keywords)
                     if keyword:
                         found_count += 1
@@ -125,9 +172,18 @@ def main():
                         body = msg.raw_text or ""
                         full_text = f"{header}{body}\n\n{link}"
 
-                        for part in split_long_text(full_text, MAX_MESSAGE_LENGTH):
-                            send_to_telegram(part)
+                        parts = split_long_text(full_text, MAX_MESSAGE_LENGTH)
+                        if len(parts) == 1:
+                            # Сообщение целиком — переносим форматирование (жирный текст, ссылки)
+                            entities = convert_entities(msg.entities, utf16_len(header))
+                            send_to_telegram(parts[0], entities=entities)
                             time.sleep(DELAY_BETWEEN_MESSAGES)
+                        else:
+                            # Длинное сообщение режем на части — форматирование в этом
+                            # случае не переносим, чтобы не запутаться со смещениями
+                            for part in parts:
+                                send_to_telegram(part)
+                                time.sleep(DELAY_BETWEEN_MESSAGES)
 
             except Exception as e:
                 print(f"Ошибка при обработке канала {channel}: {e}")
