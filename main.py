@@ -1,4 +1,5 @@
 import os
+import io
 import json
 import time
 import requests
@@ -8,6 +9,7 @@ from telethon.tl.types import (
     MessageEntityBold, MessageEntityItalic, MessageEntityUnderline,
     MessageEntityStrike, MessageEntityCode, MessageEntityPre,
     MessageEntityTextUrl, MessageEntitySpoiler, MessageEntityBlockquote,
+    MessageMediaWebPage,
 )
 
 # --- Секретные данные читаются из переменных окружения (GitHub Secrets) ---
@@ -17,14 +19,13 @@ SESSION = os.environ["TELETHON_SESSION"]
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 CHAT_ID = os.environ["CHAT_ID"]
 
-CONFIG_FILE = "config.json"   # список каналов и ключевых слов (редактируете вручную)
-STATE_FILE = "state.json"     # "память" — до какого сообщения уже проверено (создаётся сама)
+CONFIG_FILE = "config.json"
+STATE_FILE = "state.json"
 
-MAX_MESSAGE_LENGTH = 3900     # с запасом от лимита Telegram в 4096 символов на сообщение
+MAX_MESSAGE_LENGTH = 3900     # с запасом от лимита Telegram в 4096 символов на текстовое сообщение
+MAX_CAPTION_LENGTH = 1024     # лимит Telegram на подпись к фото/видео/файлу
 DELAY_BETWEEN_MESSAGES = 2    # пауза (в секундах) между отправками
 
-# Соответствие типов форматирования Telethon -> Telegram Bot API,
-# чтобы жирный текст и ссылки из оригинального поста сохранялись как есть
 ENTITY_TYPE_MAP = {
     MessageEntityBold: "bold",
     MessageEntityItalic: "italic",
@@ -51,7 +52,6 @@ def save_json(path, data):
 
 
 def matches_keywords(text, keywords):
-    """Возвращает найденное ключевое слово или None, если совпадений нет."""
     if not text:
         return None
     lowered = text.lower()
@@ -62,72 +62,92 @@ def matches_keywords(text, keywords):
 
 
 def utf16_len(s):
-    """Telegram считает позиции символов в тексте в единицах UTF-16
-    (эмодзи и некоторые символы занимают по 2 единицы вместо одной) —
-    обычная длина строки в Python этого не учитывает, поэтому считаем отдельно."""
+    """Telegram считает позиции символов в единицах UTF-16 (эмодзи и т.п.
+    занимают по 2 единицы) — обычная длина строки Python этого не учитывает."""
     return len(s.encode("utf-16-le")) // 2
 
 
 def convert_entities(entities, offset_shift):
-    """Переводит форматирование оригинального поста (жирный текст, ссылки
-    и т.п.) в формат, понятный Telegram Bot API. offset_shift нужен, потому
-    что перед текстом поста мы добавляем свою "шапку" сообщения, и позиции
-    форматирования нужно сдвинуть на её длину."""
+    """Переводит форматирование оригинального поста (жирный текст, ссылки)
+    в формат Telegram Bot API, сдвигая позиции на длину нашей "шапки"."""
     result = []
     if not entities:
         return result
     for ent in entities:
         bot_type = ENTITY_TYPE_MAP.get(type(ent))
         if not bot_type:
-            continue  # типы, которые не переносим (например, упоминания пользователей)
-        item = {
-            "type": bot_type,
-            "offset": ent.offset + offset_shift,
-            "length": ent.length,
-        }
+            continue
+        item = {"type": bot_type, "offset": ent.offset + offset_shift, "length": ent.length}
         if bot_type == "text_link":
             item["url"] = ent.url
         result.append(item)
     return result
 
 
-def send_to_telegram(text, entities=None, max_retries=5):
-    """Отправляет сообщение боту. Если Telegram временно ограничил частоту
-    запросов (ошибка 429), ждёт нужное время и повторяет попытку, чтобы
-    сообщение не терялось."""
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": CHAT_ID, "text": text, "disable_web_page_preview": False}
-    if entities:
-        payload["entities"] = entities
+def telegram_api_call(method, data, files=None, max_retries=5):
+    """Общая функция обращения к Telegram Bot API с повтором попытки,
+    если Telegram временно ограничил частоту запросов (ошибка 429)."""
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/{method}"
 
     for attempt in range(1, max_retries + 1):
-        resp = requests.post(url, json=payload, timeout=20)
+        if files:
+            for key in files:
+                fileobj = files[key][1]
+                if hasattr(fileobj, "seek"):
+                    fileobj.seek(0)
+            resp = requests.post(url, data=data, files=files, timeout=60)
+        else:
+            resp = requests.post(url, json=data, timeout=20)
+
         if resp.ok:
             return True
 
-        data = {}
+        resp_data = {}
         try:
-            data = resp.json()
+            resp_data = resp.json()
         except ValueError:
             pass
 
         if resp.status_code == 429:
-            wait_seconds = data.get("parameters", {}).get("retry_after", 5) + 1
+            wait_seconds = resp_data.get("parameters", {}).get("retry_after", 5) + 1
             print(f"    Превышен лимит запросов, жду {wait_seconds} сек. "
                   f"(попытка {attempt}/{max_retries})")
             time.sleep(wait_seconds)
             continue
 
-        print("Ошибка отправки в Telegram:", resp.text)
+        print(f"Ошибка запроса к Telegram ({method}):", resp.text)
         return False
 
-    print("Не удалось отправить сообщение после нескольких попыток — пропускаю.")
+    print("Не удалось выполнить запрос после нескольких попыток — пропускаю.")
     return False
 
 
+def send_text(text, entities=None):
+    payload = {"chat_id": CHAT_ID, "text": text, "disable_web_page_preview": False}
+    if entities:
+        payload["entities"] = entities
+    return telegram_api_call("sendMessage", payload)
+
+
+def send_media(client, msg, caption):
+    """Скачивает фото/видео/файл из поста и отправляет его боту с короткой подписью."""
+    buffer = io.BytesIO()
+    client.download_media(msg, file=buffer)
+    buffer.seek(0)
+
+    if msg.photo:
+        method, field = "sendPhoto", "photo"
+    elif msg.video:
+        method, field = "sendVideo", "video"
+    else:
+        method, field = "sendDocument", "document"
+
+    files = {field: ("file", buffer)}
+    data = {"chat_id": CHAT_ID, "caption": caption[:MAX_CAPTION_LENGTH]}
+    return telegram_api_call(method, data, files=files)
+
+
 def split_long_text(text, limit):
-    """Если текст поста длиннее лимита Telegram — режем на несколько сообщений
-    по границам строк, чтобы не обрывать текст на середине слова."""
     parts = []
     while len(text) > limit:
         cut = text.rfind("\n", 0, limit)
@@ -139,6 +159,32 @@ def split_long_text(text, limit):
     return parts
 
 
+def send_found_post(client, channel, msg, keyword):
+    link = f"https://t.me/{channel.lstrip('@')}/{msg.id}"
+    header = f"🔎 Найдено слово: {keyword}\n📢 Канал: {channel}\n\n"
+    body = msg.raw_text or ""
+    full_text = f"{header}{body}\n\n{link}"
+
+    has_media = bool(msg.photo or msg.video or msg.document)
+
+    if has_media:
+        # Сначала отправляем сам файл с коротким заголовком
+        short_caption = f"🔎 Найдено слово: {keyword}\n📢 Канал: {channel}"
+        send_media(client, msg, short_caption)
+        time.sleep(DELAY_BETWEEN_MESSAGES)
+
+    # Затем — полный текст поста (со ссылками и форматированием, если он не был разбит)
+    parts = split_long_text(full_text, MAX_MESSAGE_LENGTH)
+    if len(parts) == 1:
+        entities = convert_entities(msg.entities, utf16_len(header))
+        send_text(parts[0], entities=entities)
+        time.sleep(DELAY_BETWEEN_MESSAGES)
+    else:
+        for part in parts:
+            send_text(part)
+            time.sleep(DELAY_BETWEEN_MESSAGES)
+
+
 def main():
     config = load_json(CONFIG_FILE, {"channels": [], "keywords": []})
     state = load_json(STATE_FILE, {})
@@ -147,8 +193,7 @@ def main():
     keywords = config.get("keywords", [])
 
     if not channels or not keywords:
-        print("Список каналов или ключевых слов пуст — нечего проверять. "
-              "Заполните config.json.")
+        print("Список каналов или ключевых слов пуст — нечего проверять. Заполните config.json.")
         return
 
     with TelegramClient(StringSession(SESSION), API_ID, API_HASH) as client:
@@ -167,23 +212,7 @@ def main():
                     keyword = matches_keywords(msg.raw_text, keywords)
                     if keyword:
                         found_count += 1
-                        link = f"https://t.me/{channel.lstrip('@')}/{msg.id}"
-                        header = f"🔎 Найдено слово: {keyword}\n📢 Канал: {channel}\n\n"
-                        body = msg.raw_text or ""
-                        full_text = f"{header}{body}\n\n{link}"
-
-                        parts = split_long_text(full_text, MAX_MESSAGE_LENGTH)
-                        if len(parts) == 1:
-                            # Сообщение целиком — переносим форматирование (жирный текст, ссылки)
-                            entities = convert_entities(msg.entities, utf16_len(header))
-                            send_to_telegram(parts[0], entities=entities)
-                            time.sleep(DELAY_BETWEEN_MESSAGES)
-                        else:
-                            # Длинное сообщение режем на части — форматирование в этом
-                            # случае не переносим, чтобы не запутаться со смещениями
-                            for part in parts:
-                                send_to_telegram(part)
-                                time.sleep(DELAY_BETWEEN_MESSAGES)
+                        send_found_post(client, channel, msg, keyword)
 
             except Exception as e:
                 print(f"Ошибка при обработке канала {channel}: {e}")
