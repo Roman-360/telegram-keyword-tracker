@@ -1,9 +1,7 @@
 name: Scan channels
 
 on:
-  schedule:
-    - cron: '30 16 * * *'   # 16:30 UTC = 19:30 по МСК, раз в день
-  workflow_dispatch:          # разрешает запускать вручную кнопкой на GitHub
+  workflow_dispatch:          # запускается вручную кнопкой на GitHub, а также сигналом от cron-job.org
 
 concurrency:
   group: telegram-scan       # запуски с одинаковой группой не выполняются одновременно
