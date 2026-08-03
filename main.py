@@ -129,8 +129,8 @@ def send_text(text, entities=None):
     return telegram_api_call("sendMessage", payload)
 
 
-def send_media(client, msg, caption):
-    """Скачивает фото/видео/файл из поста и отправляет его боту с короткой подписью."""
+def send_media(client, msg, caption, entities=None):
+    """Скачивает фото/видео/файл из поста и отправляет его боту с подписью."""
     buffer = io.BytesIO()
     client.download_media(msg, file=buffer)
     buffer.seek(0)
@@ -144,6 +144,8 @@ def send_media(client, msg, caption):
 
     files = {field: ("file", buffer)}
     data = {"chat_id": CHAT_ID, "caption": caption[:MAX_CAPTION_LENGTH]}
+    if entities:
+        data["caption_entities"] = json.dumps(entities)
     return telegram_api_call(method, data, files=files)
 
 
@@ -166,14 +168,20 @@ def send_found_post(client, channel, msg, keyword):
     full_text = f"{header}{body}\n\n{link}"
 
     has_media = bool(msg.photo or msg.video or msg.document)
+    fits_as_caption = len(full_text) <= MAX_CAPTION_LENGTH
+
+    if has_media and fits_as_caption:
+        # Короткий пост — фото и текст одним сообщением, с форматированием и ссылками
+        entities = convert_entities(msg.entities, utf16_len(header))
+        send_media(client, msg, full_text, entities=entities)
+        return
 
     if has_media:
-        # Сначала отправляем сам файл с коротким заголовком
+        # Длинный пост — фото с коротким заголовком, текст отдельным сообщением
         short_caption = f"🔎 Найдено слово: {keyword}\n📢 Канал: {channel}"
         send_media(client, msg, short_caption)
         time.sleep(DELAY_BETWEEN_MESSAGES)
 
-    # Затем — полный текст поста (со ссылками и форматированием, если он не был разбит)
     parts = split_long_text(full_text, MAX_MESSAGE_LENGTH)
     if len(parts) == 1:
         entities = convert_entities(msg.entities, utf16_len(header))
