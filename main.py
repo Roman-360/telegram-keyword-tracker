@@ -287,6 +287,7 @@ def main():
     due_ids_preview = [cid for cid, u in users.items() if is_due(u, now_utc)]
     if not due_ids_preview and not has_pending_channels(users):
         print("Сейчас нечего делать — выходим без подключения к Telegram.")
+        save_users(users)  # на случай, если только что произошла миграция из старого формата
         return
 
     with TelegramClient(StringSession(SESSION), API_ID, API_HASH) as client:
