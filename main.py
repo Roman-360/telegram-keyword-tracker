@@ -127,8 +127,9 @@ def split_long_text(text, limit):
 
 
 def is_due(user, now_utc):
-    """Наступил ли у пользователя его час доставки и не доставляли ли мы ему
-    уже находки сегодня."""
+    """Наступило ли у пользователя его время доставки (с окном в 15 минут,
+    чтобы не пропустить момент, если сам запуск случится с небольшой
+    задержкой) и не доставляли ли мы ему уже находки сегодня."""
     try:
         tz = ZoneInfo(user.get("timezone", "Europe/Moscow"))
     except Exception:
@@ -140,8 +141,26 @@ def is_due(user, now_utc):
     if user.get("last_delivered_date") == today_str:
         return False
 
-    delivery_hour = user.get("delivery_time", "19:00")
-    return local_now.strftime("%H:00") == delivery_hour
+    delivery_time = user.get("delivery_time", "19:00")
+    try:
+        target_hour, target_minute = map(int, delivery_time.split(":"))
+    except Exception:
+        target_hour, target_minute = 19, 0
+
+    target_minutes = target_hour * 60 + target_minute
+    now_minutes = local_now.hour * 60 + local_now.minute
+    diff = (now_minutes - target_minutes) % (24 * 60)
+    return 0 <= diff < 15
+
+
+def has_pending_channels(users):
+    """Есть ли каналы, добавленные в режиме "только новое", для которых ещё
+    не зафиксирована стартовая точка."""
+    return any(
+        chstate.get("pending_init")
+        for user in users.values()
+        for chstate in user.get("channels", {}).values()
+    )
 
 
 # ==================== Отправка в Telegram ====================
@@ -264,6 +283,11 @@ def main():
         return
 
     now_utc = datetime.now(timezone.utc)
+
+    due_ids_preview = [cid for cid, u in users.items() if is_due(u, now_utc)]
+    if not due_ids_preview and not has_pending_channels(users):
+        print("Сейчас нечего делать — выходим без подключения к Telegram.")
+        return
 
     with TelegramClient(StringSession(SESSION), API_ID, API_HASH) as client:
         initialize_pending_channels(client, users)
