@@ -1,0 +1,23 @@
+{
+  "users": {
+    "1389229319": {
+      "channels": {
+        "@rian_ru": {
+          "last_id": 343510,
+          "pending_init": false
+        }
+      },
+      "keywords": [
+        "Главные новости дня",
+        "О потерях ВСУ"
+      ],
+      "destination": {
+        "type": "private",
+        "chat_id": "1389229319"
+      },
+      "delivery_time": "19:00",
+      "timezone": "Europe/Moscow",
+      "last_delivered_date": null
+    }
+  }
+}
