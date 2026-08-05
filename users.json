@@ -3,7 +3,7 @@
     "1389229319": {
       "channels": {
         "@rian_ru": {
-          "last_id": 343510,
+          "last_id": 343567,
           "pending_init": false
         }
       },
@@ -17,7 +17,7 @@
       },
       "delivery_time": "19:00",
       "timezone": "Europe/Moscow",
-      "last_delivered_date": null
+      "last_delivered_date": "2026-08-05"
     }
   }
 }
