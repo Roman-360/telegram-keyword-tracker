@@ -5,6 +5,10 @@
         "@rian_ru": {
           "last_id": 343567,
           "pending_init": false
+        },
+        "@hobsplay": {
+          "last_id": 0,
+          "pending_init": true
         }
       },
       "keywords": [
