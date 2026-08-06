@@ -21,7 +21,9 @@
     },
     "-5447412757": {
       "channels": {},
-      "keywords": [],
+      "keywords": [
+        "Nana Banana"
+      ],
       "destination": {
         "type": "private",
         "chat_id": "-5447412757"
