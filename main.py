@@ -13,12 +13,11 @@ from telethon.tl.types import (
     MessageEntityTextUrl, MessageEntitySpoiler, MessageEntityBlockquote,
 )
 
-# --- Секретные данные читаются из переменных окружения (GitHub Secrets) ---
 API_ID = int(os.environ["TELEGRAM_API_ID"])
 API_HASH = os.environ["TELEGRAM_API_HASH"]
 SESSION = os.environ["TELETHON_SESSION"]
 BOT_TOKEN = os.environ["BOT_TOKEN"]
-OWNER_CHAT_ID = os.environ.get("OWNER_CHAT_ID")  # нужен только для одноразового переноса старых данных
+OWNER_CHAT_ID = os.environ.get("OWNER_CHAT_ID")
 
 USERS_FILE = "users.json"
 LEGACY_CONFIG_FILE = "config.json"
@@ -27,6 +26,7 @@ LEGACY_STATE_FILE = "state.json"
 MAX_MESSAGE_LENGTH = 3900
 MAX_CAPTION_LENGTH = 1024
 DELAY_BETWEEN_MESSAGES = 2
+DEFAULT_TZ = "Europe/Moscow"
 
 ENTITY_TYPE_MAP = {
     MessageEntityBold: "bold",
@@ -41,14 +41,11 @@ ENTITY_TYPE_MAP = {
 }
 
 
-# ==================== Загрузка / сохранение пользователей ====================
+# ==================== Загрузка / сохранение / миграция ====================
 
 def migrate_legacy_if_needed():
-    """Одноразовый перенос данных из старого формата (config.json + state.json)
-    в новый users.json, чтобы не терять прогресс и не слать историю заново."""
     if not (os.path.exists(LEGACY_CONFIG_FILE) and os.path.exists(LEGACY_STATE_FILE) and OWNER_CHAT_ID):
         return {}
-
     with open(LEGACY_CONFIG_FILE, "r", encoding="utf-8") as f:
         config = json.load(f)
     with open(LEGACY_STATE_FILE, "r", encoding="utf-8") as f:
@@ -56,26 +53,65 @@ def migrate_legacy_if_needed():
 
     channels = {}
     for ch in config.get("channels", []):
-        channels[ch] = {"last_id": state.get(ch, 0), "pending_init": False}
+        channels[ch] = {"last_id": state.get(ch, 0)}
 
     print("Выполняю перенос старых настроек (config.json/state.json) в users.json")
     return {
         OWNER_CHAT_ID: {
             "channels": channels,
-            "keywords": config.get("keywords", []),
+            "keywords": {kw: {} for kw in config.get("keywords", [])},
             "destination": {"type": "private", "chat_id": OWNER_CHAT_ID},
             "delivery_time": "19:00",
-            "timezone": "Europe/Moscow",
-            "last_delivered_date": None,
+            "timezone": DEFAULT_TZ,
         }
     }
+
+
+def route_key(destination, delivery_time, tz_name):
+    return f"{destination.get('type')}:{destination.get('chat_id')}|{delivery_time}|{tz_name}"
+
+
+def normalize_user(user):
+    """Приводит запись пользователя к актуальному формату, независимо от того,
+    в каком из прошлых форматов она была сохранена."""
+    user.setdefault("destination", {"type": "private", "chat_id": "0"})
+    user.setdefault("delivery_time", "19:00")
+    user.setdefault("timezone", DEFAULT_TZ)
+
+    # Слова: старый формат — список строк; новый — объект с настройками
+    kws = user.get("keywords", {})
+    if isinstance(kws, list):
+        user["keywords"] = {kw: {} for kw in kws}
+    for kw, settings in user["keywords"].items():
+        settings.setdefault("excluded_channels", [])
+        settings.setdefault("only_channels", [])
+        settings.setdefault("overrides", {})
+
+    global_route_key = route_key(user["destination"], user["delivery_time"], user["timezone"])
+    old_last_delivered = user.pop("last_delivered_date", None)
+
+    for channel, chstate in user.get("channels", {}).items():
+        chstate.setdefault("baseline_id", 0)
+        chstate.setdefault("pending_init", False)
+        chstate.setdefault("immediate_requested", False)
+        chstate.setdefault("route_state", {})
+        if "last_id" in chstate:
+            old_last_id = chstate.pop("last_id")
+            chstate["route_state"].setdefault(
+                global_route_key, {"last_id": old_last_id, "last_delivered_date": old_last_delivered}
+            )
+
+    return user
 
 
 def load_users():
     if os.path.exists(USERS_FILE):
         with open(USERS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f).get("users", {})
-    return migrate_legacy_if_needed()
+            raw = json.load(f).get("users", {})
+    else:
+        raw = migrate_legacy_if_needed()
+
+    return {chat_id: normalize_user(user) for chat_id, user in raw.items()}
 
 
 def save_users(users):
@@ -85,11 +121,11 @@ def save_users(users):
 
 # ==================== Вспомогательные функции ====================
 
-def matches_keywords(text, keywords):
+def matches_keywords(text, keyword_names):
     if not text:
         return None
     lowered = text.lower()
-    for kw in keywords:
+    for kw in keyword_names:
         if kw.lower() in lowered:
             return kw
     return None
@@ -126,48 +162,63 @@ def split_long_text(text, limit):
     return parts
 
 
-def is_due(user, now_utc):
-    """Наступило ли у пользователя его время доставки (с окном в 15 минут,
-    чтобы не пропустить момент, если сам запуск случится с небольшой
-    задержкой) и не доставляли ли мы ему уже находки сегодня."""
+def is_route_due(delivery_time, tz_name, now_utc, last_delivered_date):
     try:
-        tz = ZoneInfo(user.get("timezone", "Europe/Moscow"))
+        tz = ZoneInfo(tz_name)
     except Exception:
-        tz = ZoneInfo("Europe/Moscow")
+        tz = ZoneInfo(DEFAULT_TZ)
 
     local_now = now_utc.astimezone(tz)
     today_str = local_now.date().isoformat()
 
-    if user.get("last_delivered_date") == today_str:
+    if last_delivered_date == today_str:
         return False
 
-    delivery_time = user.get("delivery_time", "19:00")
     try:
-        target_hour, target_minute = map(int, delivery_time.split(":"))
+        th, tm = map(int, delivery_time.split(":"))
     except Exception:
-        target_hour, target_minute = 19, 0
+        th, tm = 19, 0
 
-    target_minutes = target_hour * 60 + target_minute
+    target_minutes = th * 60 + tm
     now_minutes = local_now.hour * 60 + local_now.minute
     diff = (now_minutes - target_minutes) % (24 * 60)
     return 0 <= diff < 15
 
 
-def has_pending_channels(users):
-    """Есть ли каналы, добавленные в режиме "только новое", для которых ещё
-    не зафиксирована стартовая точка."""
-    return any(
-        chstate.get("pending_init")
-        for user in users.values()
-        for chstate in user.get("channels", {}).values()
-    )
+def keyword_applies_to_channel(kw_settings, channel):
+    only = kw_settings.get("only_channels") or []
+    if only:
+        return channel in only
+    excluded = kw_settings.get("excluded_channels") or []
+    return channel not in excluded
+
+
+def effective_route(user, channel, kw_settings):
+    override = (kw_settings.get("overrides") or {}).get(channel)
+    if override:
+        return override["destination"], override["delivery_time"], override.get("timezone", user["timezone"])
+    return user["destination"], user["delivery_time"], user["timezone"]
+
+
+def build_channel_routes(user, channel):
+    """Группирует ключевые слова, применимые к каналу, по эффективному
+    маршруту (место + время + пояс) — чтобы не сканировать канал отдельно
+    под каждое слово, если у них одинаковые настройки."""
+    routes = {}
+    for kw, kw_settings in user.get("keywords", {}).items():
+        if not keyword_applies_to_channel(kw_settings, channel):
+            continue
+        dest, dtime, tz = effective_route(user, channel, kw_settings)
+        rk = route_key(dest, dtime, tz)
+        routes.setdefault(rk, {"destination": dest, "delivery_time": dtime, "timezone": tz, "keywords": []})
+        routes[rk]["keywords"].append(kw)
+    return routes
 
 
 # ==================== Отправка в Telegram ====================
 
 def telegram_api_call(method, data, files=None, max_retries=5):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/{method}"
-
     for attempt in range(1, max_retries + 1):
         if files:
             for f in files.values():
@@ -255,11 +306,65 @@ def deliver_post(client, chat_id, channel, msg, keyword):
             time.sleep(DELAY_BETWEEN_MESSAGES)
 
 
+# ==================== Обработка одного маршрута ====================
+
+def process_route(client, channel, route_state_dict, rk, route, baseline_id, force, now_utc):
+    """Сканирует канал по конкретному маршруту (место+время+свои слова) и
+    доставляет находки. force=True — игнорирует проверку времени (для
+    внеочередных проверок «Переслать сейчас»)."""
+    rstate = route_state_dict.setdefault(rk, {"last_id": baseline_id, "last_delivered_date": None})
+
+    if not force and not is_route_due(route["delivery_time"], route["timezone"], now_utc, rstate.get("last_delivered_date")):
+        return False  # не наступило время для этого маршрута
+
+    min_id = rstate.get("last_id", baseline_id)
+    max_id_seen = min_id
+
+    try:
+        messages = list(client.iter_messages(channel, min_id=min_id, reverse=True))
+    except Exception as e:
+        print(f"    Ошибка при сканировании {channel}: {e}")
+        return False
+
+    for msg in messages:
+        if msg.id > max_id_seen:
+            max_id_seen = msg.id
+        keyword = matches_keywords(msg.raw_text, route["keywords"])
+        if keyword:
+            deliver_post(client, route["destination"]["chat_id"], channel, msg, keyword)
+
+    rstate["last_id"] = max_id_seen
+    if not force:
+        local_today = now_utc.astimezone(ZoneInfo(route["timezone"])).date().isoformat()
+        rstate["last_delivered_date"] = local_today
+
+    return True
+
+
+# ==================== Немедленные проверки ("Переслать сейчас") ====================
+
+def process_immediate_requests(client, users, now_utc):
+    any_done = False
+    for chat_id, user in users.items():
+        for channel, chstate in user.get("channels", {}).items():
+            if not chstate.get("immediate_requested"):
+                continue
+            print(f"Внеочередная проверка: {channel} для пользователя {chat_id}")
+            routes = build_channel_routes(user, channel)
+            for rk, route in routes.items():
+                process_route(
+                    client, channel, chstate["route_state"], rk, route,
+                    chstate.get("baseline_id", 0), force=True, now_utc=now_utc
+                )
+            chstate["immediate_requested"] = False
+            any_done = True
+    return any_done
+
+
 # ==================== Инициализация каналов "только новое" ====================
 
 def initialize_pending_channels(client, users):
-    """Для каналов, добавленных в режиме "только новое", один раз запоминаем
-    текущую последнюю точку в канале — ничего из истории не отправляем."""
+    any_done = False
     for chat_id, user in users.items():
         for channel, chstate in user.get("channels", {}).items():
             if chstate.get("pending_init"):
@@ -269,12 +374,44 @@ def initialize_pending_channels(client, users):
                         latest_id = msg.id
                 except Exception as e:
                     print(f"Не удалось инициализировать {channel}: {e}")
-                chstate["last_id"] = latest_id
+                chstate["baseline_id"] = latest_id
                 chstate["pending_init"] = False
-                print(f"Канал {channel} для пользователя {chat_id}: начинаем отслеживать с сообщения {latest_id}")
+                any_done = True
+                print(f"Канал {channel} для {chat_id}: начинаем с сообщения {latest_id}")
+    return any_done
 
 
-# ==================== Основная логика ====================
+# ==================== Плановая доставка ====================
+
+def any_route_due_preview(users, now_utc):
+    """Быстрая проверка без подключения к Telegram: есть ли вообще смысл
+    сейчас что-то делать."""
+    for user in users.values():
+        for channel, chstate in user.get("channels", {}).items():
+            if chstate.get("pending_init") or chstate.get("immediate_requested"):
+                return True
+            routes = build_channel_routes(user, channel)
+            for rk, route in routes.items():
+                rstate = chstate.get("route_state", {}).get(rk, {})
+                if is_route_due(route["delivery_time"], route["timezone"], now_utc, rstate.get("last_delivered_date")):
+                    return True
+    return False
+
+
+def process_scheduled(client, users, now_utc):
+    for chat_id, user in users.items():
+        for channel, chstate in user.get("channels", {}).items():
+            routes = build_channel_routes(user, channel)
+            for rk, route in routes.items():
+                done = process_route(
+                    client, channel, chstate["route_state"], rk, route,
+                    chstate.get("baseline_id", 0), force=False, now_utc=now_utc
+                )
+                if done:
+                    print(f"  {channel} / маршрут {rk}: доставлено пользователю {chat_id}")
+
+
+# ==================== Точка входа ====================
 
 def main():
     users = load_users()
@@ -284,63 +421,21 @@ def main():
 
     now_utc = datetime.now(timezone.utc)
 
-    due_ids_preview = [cid for cid, u in users.items() if is_due(u, now_utc)]
-    if not due_ids_preview and not has_pending_channels(users):
+    needs_connection = any_route_due_preview(users, now_utc) or any(
+        chstate.get("pending_init") or chstate.get("immediate_requested")
+        for user in users.values()
+        for chstate in user.get("channels", {}).values()
+    )
+
+    if not needs_connection:
         print("Сейчас нечего делать — выходим без подключения к Telegram.")
-        save_users(users)  # на случай, если только что произошла миграция из старого формата
+        save_users(users)
         return
 
     with TelegramClient(StringSession(SESSION), API_ID, API_HASH) as client:
         initialize_pending_channels(client, users)
-
-        due_users = {cid: u for cid, u in users.items() if is_due(u, now_utc)}
-
-        if not due_users:
-            print("Сейчас никому не пора получать находки — выходим.")
-            save_users(users)
-            return
-
-        print(f"Сейчас пора получать находки: {len(due_users)} пользователь(ей)")
-
-        # channel -> {chat_id: last_id}, только для тех, кому сейчас пора
-        channel_map = {}
-        for chat_id, user in due_users.items():
-            for channel, chstate in user.get("channels", {}).items():
-                channel_map.setdefault(channel, {})[chat_id] = chstate["last_id"]
-
-        for channel, per_user_last_id in channel_map.items():
-            print(f"Проверяю канал: {channel}")
-            min_id = min(per_user_last_id.values())
-            max_id_seen = min_id
-
-            try:
-                messages = list(client.iter_messages(channel, min_id=min_id, reverse=True))
-            except Exception as e:
-                print(f"  Ошибка при обработке канала {channel}: {e}")
-                continue
-
-            for msg in messages:
-                if msg.id > max_id_seen:
-                    max_id_seen = msg.id
-
-                for chat_id, last_id in per_user_last_id.items():
-                    if msg.id <= last_id:
-                        continue
-                    user = due_users[chat_id]
-                    keyword = matches_keywords(msg.raw_text, user.get("keywords", []))
-                    if keyword:
-                        destination = user.get("destination", {"type": "private", "chat_id": chat_id})
-                        deliver_post(client, destination["chat_id"], channel, msg, keyword)
-
-            for chat_id in per_user_last_id:
-                users[chat_id]["channels"][channel]["last_id"] = max_id_seen
-            print(f"  Готово.")
-
-        for chat_id, user in due_users.items():
-            tz = ZoneInfo(user.get("timezone", "Europe/Moscow"))
-            local_today = now_utc.astimezone(tz).date().isoformat()
-            users[chat_id]["last_delivered_date"] = local_today
-            print(f"  Пользователь {chat_id}: доставка выполнена на {local_today}")
+        process_immediate_requests(client, users, now_utc)
+        process_scheduled(client, users, now_utc)
 
     save_users(users)
 
