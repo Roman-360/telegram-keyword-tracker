@@ -8,6 +8,12 @@
           "baseline_id": 0,
           "immediate_requested": false,
           "route_state": {}
+        },
+        "@telwg_ivanovskoe": {
+          "baseline_id": 0,
+          "pending_init": false,
+          "immediate_requested": true,
+          "route_state": {}
         }
       },
       "keywords": {
