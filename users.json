@@ -4,17 +4,33 @@
       "channels": {
         "@rian_ru": {
           "last_id": 343567,
-          "pending_init": false
+          "pending_init": false,
+          "baseline_id": 0,
+          "immediate_requested": false,
+          "route_state": {}
         },
         "@hobsplay": {
           "last_id": 14618,
-          "pending_init": false
+          "pending_init": false,
+          "baseline_id": 0,
+          "immediate_requested": false,
+          "route_state": {}
         }
       },
-      "keywords": [
-        "Главные новости дня",
-        "О потерях ВСУ"
-      ],
+      "keywords": {
+        "Главные новости дня": {
+          "excluded_channels": [
+            "@hobsplay"
+          ],
+          "only_channels": [],
+          "overrides": {}
+        },
+        "О потерях ВСУ": {
+          "excluded_channels": [],
+          "only_channels": [],
+          "overrides": {}
+        }
+      },
       "destination": {
         "type": "group",
         "chat_id": "-1004338985068",
