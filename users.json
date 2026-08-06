@@ -18,6 +18,17 @@
       "delivery_time": "19:00",
       "timezone": "Europe/Moscow",
       "last_delivered_date": "2026-08-05"
+    },
+    "-5447412757": {
+      "channels": {},
+      "keywords": [],
+      "destination": {
+        "type": "private",
+        "chat_id": "-5447412757"
+      },
+      "delivery_time": "19:00",
+      "timezone": "Europe/Moscow",
+      "last_delivered_date": null
     }
   }
 }
