@@ -16,8 +16,9 @@
         "О потерях ВСУ"
       ],
       "destination": {
-        "type": "private",
-        "chat_id": "1389229319"
+        "type": "group",
+        "chat_id": "-1004338985068",
+        "title": "тесто"
       },
       "delivery_time": "20:00",
       "timezone": "Europe/Moscow",
