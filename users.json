@@ -20,7 +20,12 @@
       "last_delivered_date": "2026-08-05"
     },
     "-5447412757": {
-      "channels": {},
+      "channels": {
+        "@gordoneuron": {
+          "last_id": 0,
+          "pending_init": false
+        }
+      },
       "keywords": [
         "Nana Banana"
       ],
