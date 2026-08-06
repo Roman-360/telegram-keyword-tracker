@@ -15,6 +15,12 @@
           "baseline_id": 0,
           "immediate_requested": false,
           "route_state": {}
+        },
+        "@bez_klyucha": {
+          "baseline_id": 0,
+          "pending_init": false,
+          "immediate_requested": true,
+          "route_state": {}
         }
       },
       "keywords": {
