@@ -40,6 +40,17 @@
       "delivery_time": "19:00",
       "timezone": "Europe/Moscow",
       "last_delivered_date": null
+    },
+    "-1004338985068": {
+      "channels": {},
+      "keywords": [],
+      "destination": {
+        "type": "private",
+        "chat_id": "-1004338985068"
+      },
+      "delivery_time": "19:00",
+      "timezone": "Europe/Moscow",
+      "last_delivered_date": null
     }
   }
 }
