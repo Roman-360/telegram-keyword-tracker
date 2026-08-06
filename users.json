@@ -3,17 +3,26 @@
     "1389229319": {
       "channels": {
         "@rian_ru": {
-          "last_id": 343567,
           "pending_init": false,
           "baseline_id": 0,
           "immediate_requested": false,
-          "route_state": {}
+          "route_state": {
+            "group:-1004338985068|20:00|Europe/Moscow": {
+              "last_id": 343567,
+              "last_delivered_date": null
+            }
+          }
         },
         "@telwg_ivanovskoe": {
           "baseline_id": 0,
           "pending_init": false,
-          "immediate_requested": true,
-          "route_state": {}
+          "immediate_requested": false,
+          "route_state": {
+            "group:-1004338985068|20:00|Europe/Moscow": {
+              "last_id": 18169,
+              "last_delivered_date": null
+            }
+          }
         }
       },
       "keywords": {
@@ -38,37 +47,45 @@
         "title": "тесто"
       },
       "delivery_time": "20:00",
-      "timezone": "Europe/Moscow",
-      "last_delivered_date": null
+      "timezone": "Europe/Moscow"
     },
     "-5447412757": {
       "channels": {
         "@gordoneuron": {
-          "last_id": 0,
-          "pending_init": false
+          "pending_init": false,
+          "baseline_id": 0,
+          "immediate_requested": false,
+          "route_state": {
+            "private:-5447412757|19:00|Europe/Moscow": {
+              "last_id": 0,
+              "last_delivered_date": null
+            }
+          }
         }
       },
-      "keywords": [
-        "Nana Banana"
-      ],
+      "keywords": {
+        "Nana Banana": {
+          "excluded_channels": [],
+          "only_channels": [],
+          "overrides": {}
+        }
+      },
       "destination": {
         "type": "private",
         "chat_id": "-5447412757"
       },
       "delivery_time": "19:00",
-      "timezone": "Europe/Moscow",
-      "last_delivered_date": null
+      "timezone": "Europe/Moscow"
     },
     "-1004338985068": {
       "channels": {},
-      "keywords": [],
+      "keywords": {},
       "destination": {
         "type": "private",
         "chat_id": "-1004338985068"
       },
       "delivery_time": "19:00",
-      "timezone": "Europe/Moscow",
-      "last_delivered_date": null
+      "timezone": "Europe/Moscow"
     }
   }
 }
