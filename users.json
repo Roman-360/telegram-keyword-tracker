@@ -58,6 +58,13 @@
           ],
           "only_channels": [],
           "overrides": {}
+        },
+        "Защита курсовой": {
+          "excluded_channels": [],
+          "only_channels": [
+            "@hse_circus"
+          ],
+          "overrides": {}
         }
       },
       "destination": {
