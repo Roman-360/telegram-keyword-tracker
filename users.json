@@ -16,7 +16,7 @@
         "@telwg_ivanovskoe": {
           "baseline_id": 0,
           "pending_init": false,
-          "immediate_requested": false,
+          "immediate_requested": true,
           "route_state": {
             "group:-1004338985068|20:00|Europe/Moscow": {
               "last_id": 18169,
