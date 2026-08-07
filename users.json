@@ -57,8 +57,8 @@
           "immediate_requested": false,
           "route_state": {
             "private:-5447412757|19:00|Europe/Moscow": {
-              "last_id": 0,
-              "last_delivered_date": null
+              "last_id": 184,
+              "last_delivered_date": "2026-08-07"
             }
           }
         }
