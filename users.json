@@ -8,8 +8,8 @@
           "immediate_requested": false,
           "route_state": {
             "group:-1004338985068|20:00|Europe/Moscow": {
-              "last_id": 343567,
-              "last_delivered_date": null
+              "last_id": 343699,
+              "last_delivered_date": "2026-08-07"
             }
           }
         },
@@ -19,8 +19,8 @@
           "immediate_requested": false,
           "route_state": {
             "group:-1004338985068|20:00|Europe/Moscow": {
-              "last_id": 18170,
-              "last_delivered_date": null
+              "last_id": 18175,
+              "last_delivered_date": "2026-08-07"
             }
           }
         }
