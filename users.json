@@ -32,13 +32,6 @@
           ],
           "only_channels": [],
           "overrides": {}
-        },
-        "Таблица": {
-          "excluded_channels": [],
-          "only_channels": [
-            "@Coach_Poiurov"
-          ],
-          "overrides": {}
         }
       },
       "destination": {
