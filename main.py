@@ -311,20 +311,23 @@ def deliver_post(client, chat_id, channel, msg, keyword):
 def process_route(client, channel, route_state_dict, rk, route, baseline_id, force, now_utc):
     """Сканирует канал по конкретному маршруту (место+время+свои слова) и
     доставляет находки. force=True — игнорирует проверку времени (для
-    внеочередных проверок «Переслать сейчас»)."""
+    внеочередных проверок «Переслать сейчас»). Возвращает число найденных
+    и отправленных постов, либо None, если маршрут не проверялся вовсе
+    (не наступило время или произошла ошибка)."""
     rstate = route_state_dict.setdefault(rk, {"last_id": baseline_id, "last_delivered_date": None})
 
     if not force and not is_route_due(route["delivery_time"], route["timezone"], now_utc, rstate.get("last_delivered_date")):
-        return False  # не наступило время для этого маршрута
+        return None  # не наступило время для этого маршрута
 
     min_id = rstate.get("last_id", baseline_id)
     max_id_seen = min_id
+    found_count = 0
 
     try:
         messages = list(client.iter_messages(channel, min_id=min_id, reverse=True))
     except Exception as e:
         print(f"    Ошибка при сканировании {channel}: {e}")
-        return False
+        return None
 
     for msg in messages:
         if msg.id > max_id_seen:
@@ -332,13 +335,14 @@ def process_route(client, channel, route_state_dict, rk, route, baseline_id, for
         keyword = matches_keywords(msg.raw_text, route["keywords"])
         if keyword:
             deliver_post(client, route["destination"]["chat_id"], channel, msg, keyword)
+            found_count += 1
 
     rstate["last_id"] = max_id_seen
     if not force:
         local_today = now_utc.astimezone(ZoneInfo(route["timezone"])).date().isoformat()
         rstate["last_delivered_date"] = local_today
 
-    return True
+    return found_count
 
 
 # ==================== Немедленные проверки ("Переслать сейчас") ====================
@@ -351,13 +355,22 @@ def process_immediate_requests(client, users, now_utc):
                 continue
             print(f"Внеочередная проверка: {channel} для пользователя {chat_id}")
             routes = build_channel_routes(user, channel)
+            total_found = 0
             for rk, route in routes.items():
-                process_route(
+                result = process_route(
                     client, channel, chstate["route_state"], rk, route,
                     chstate.get("baseline_id", 0), force=True, now_utc=now_utc
                 )
+                if result:
+                    total_found += result
             chstate["immediate_requested"] = False
             any_done = True
+
+            if total_found > 0:
+                notice = f"✅ Проверка канала {channel} завершена — найдено и отправлено постов: {total_found}."
+            else:
+                notice = f"✅ Проверка канала {channel} завершена — подходящих постов в истории не нашлось."
+            send_text(chat_id, notice)
     return any_done
 
 
@@ -403,12 +416,12 @@ def process_scheduled(client, users, now_utc):
         for channel, chstate in user.get("channels", {}).items():
             routes = build_channel_routes(user, channel)
             for rk, route in routes.items():
-                done = process_route(
+                result = process_route(
                     client, channel, chstate["route_state"], rk, route,
                     chstate.get("baseline_id", 0), force=False, now_utc=now_utc
                 )
-                if done:
-                    print(f"  {channel} / маршрут {rk}: доставлено пользователю {chat_id}")
+                if result is not None:
+                    print(f"  {channel} / маршрут {rk}: доставлено пользователю {chat_id} (найдено {result})")
 
 
 # ==================== Точка входа ====================
