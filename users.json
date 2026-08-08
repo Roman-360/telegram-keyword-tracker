@@ -31,7 +31,7 @@
         "@Coach_Poiurov": {
           "baseline_id": 0,
           "pending_init": false,
-          "immediate_requested": true,
+          "immediate_requested": false,
           "route_state": {
             "private:1389229319|20:00|Europe/Moscow": {
               "last_id": 1638,
