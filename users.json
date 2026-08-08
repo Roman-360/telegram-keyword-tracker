@@ -20,7 +20,7 @@
         "@hse_circus": {
           "baseline_id": 0,
           "pending_init": false,
-          "immediate_requested": false,
+          "immediate_requested": true,
           "route_state": {
             "private:1389229319|20:00|Europe/Moscow": {
               "last_id": 26,
