@@ -20,8 +20,13 @@
         "@cyber_misha": {
           "baseline_id": 0,
           "pending_init": false,
-          "immediate_requested": true,
-          "route_state": {}
+          "immediate_requested": false,
+          "route_state": {
+            "private:1389229319|20:00|Europe/Moscow": {
+              "last_id": 1859,
+              "last_delivered_date": null
+            }
+          }
         }
       },
       "keywords": {
