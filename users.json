@@ -51,13 +51,6 @@
           ],
           "only_channels": [],
           "overrides": {}
-        },
-        "Аватар": {
-          "excluded_channels": [],
-          "only_channels": [
-            "@cyber_misha"
-          ],
-          "overrides": {}
         }
       },
       "destination": {
