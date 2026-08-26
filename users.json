@@ -53,6 +53,11 @@
           "excluded_channels": [],
           "only_channels": [],
           "overrides": {}
+        },
+        "Спецоперация": {
+          "excluded_channels": [],
+          "only_channels": [],
+          "overrides": {}
         }
       },
       "destination": {
