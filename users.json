@@ -48,6 +48,11 @@
           "excluded_channels": [],
           "only_channels": [],
           "overrides": {}
+        },
+        "Rammstein": {
+          "excluded_channels": [],
+          "only_channels": [],
+          "overrides": {}
         }
       },
       "destination": {
