@@ -42,6 +42,13 @@
           ],
           "only_channels": [],
           "overrides": {}
+        },
+        "Рамштайн": {
+          "excluded_channels": [],
+          "only_channels": [
+            "@kvashenayakto"
+          ],
+          "overrides": {}
         }
       },
       "destination": {
