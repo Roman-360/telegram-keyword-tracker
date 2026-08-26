@@ -43,6 +43,11 @@
             "@kvashenayakto"
           ],
           "overrides": {}
+        },
+        "Раммштайн": {
+          "excluded_channels": [],
+          "only_channels": [],
+          "overrides": {}
         }
       },
       "destination": {
