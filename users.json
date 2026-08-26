@@ -20,6 +20,12 @@
               "last_delivered_date": "2026-08-11"
             }
           }
+        },
+        "@kvashenayakto": {
+          "baseline_id": 0,
+          "pending_init": false,
+          "immediate_requested": true,
+          "route_state": {}
         }
       },
       "keywords": {
