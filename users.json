@@ -53,6 +53,13 @@
           "excluded_channels": [],
           "only_channels": [],
           "overrides": {}
+        },
+        "Авто": {
+          "excluded_channels": [],
+          "only_channels": [
+            "@kudamsk_events"
+          ],
+          "overrides": {}
         }
       },
       "destination": {
