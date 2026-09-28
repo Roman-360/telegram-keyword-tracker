@@ -31,7 +31,8 @@
       "keywords": {
         "Главные новости дня": {
           "excluded_channels": [
-            "@hobsplay"
+            "@hobsplay",
+            "@kudamsk_events"
           ],
           "only_channels": [],
           "overrides": {}
