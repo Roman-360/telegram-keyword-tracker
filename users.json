@@ -30,13 +30,6 @@
           "only_channels": [],
           "overrides": {}
         },
-        "О потерях ВСУ": {
-          "excluded_channels": [
-            "@hobsplay"
-          ],
-          "only_channels": [],
-          "overrides": {}
-        },
         "Рамштайн": {
           "excluded_channels": [],
           "only_channels": [
