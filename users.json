@@ -69,7 +69,9 @@
           "overrides": {}
         },
         "Парк": {
-          "excluded_channels": [],
+          "excluded_channels": [
+            "@rian_ru"
+          ],
           "only_channels": [
             "@kudamsk_events"
           ],
