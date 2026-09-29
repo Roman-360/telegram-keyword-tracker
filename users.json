@@ -67,6 +67,13 @@
             "@kudamsk_events"
           ],
           "overrides": {}
+        },
+        "Парк": {
+          "excluded_channels": [],
+          "only_channels": [
+            "@kudamsk_events"
+          ],
+          "overrides": {}
         }
       },
       "destination": {
