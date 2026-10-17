@@ -12,8 +12,8 @@
               "last_delivered_date": "2026-08-07"
             },
             "private:1389229319|20:00|Europe/Moscow": {
-              "last_id": 348089,
-              "last_delivered_date": "2026-10-16"
+              "last_id": 348137,
+              "last_delivered_date": "2026-10-17"
             },
             "private:1389229319|19:15|Europe/Moscow": {
               "last_id": 343943,
@@ -27,8 +27,8 @@
           "immediate_requested": false,
           "route_state": {
             "private:1389229319|20:00|Europe/Moscow": {
-              "last_id": 6659,
-              "last_delivered_date": "2026-10-16"
+              "last_id": 6668,
+              "last_delivered_date": "2026-10-17"
             }
           }
         }
