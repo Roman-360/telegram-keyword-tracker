@@ -59,15 +59,6 @@
           "only_channels": [],
           "overrides": {}
         },
-        "Авто": {
-          "excluded_channels": [
-            "@rian_ru"
-          ],
-          "only_channels": [
-            "@kudamsk_events"
-          ],
-          "overrides": {}
-        },
         "Парк": {
           "excluded_channels": [
             "@rian_ru"
