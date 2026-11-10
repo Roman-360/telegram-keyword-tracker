@@ -104,6 +104,16 @@
       },
       "delivery_time": "19:00",
       "timezone": "Europe/Moscow"
+    },
+    "5667895061": {
+      "channels": {},
+      "keywords": {},
+      "destination": {
+        "type": "private",
+        "chat_id": "5667895061"
+      },
+      "delivery_time": "19:00",
+      "timezone": "Europe/Moscow"
     }
   }
 }
